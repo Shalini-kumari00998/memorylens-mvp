@@ -3,7 +3,7 @@ services:
     name: memorylens
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
     envVars:
       - key: GEMINI_API_KEY
         sync: false        # means Render will ask you to fill it in the dashboard
