@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MemoryLens — Find photos you half-remember</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="layout">
+    <!-- LEFT: Chat panel -->
+    <div class="chat-panel">
+      <header>
+        <div class="logo">
+          <span class="logo-icon">🔍</span>
+          <div>
+            <h1>MemoryLens</h1>
+            <p>Describe the photo you remember — I'll help you find it.</p>
+          </div>
+        </div>
+        <button id="reset-btn" title="Start over">↺ Reset</button>
+      </header>
+
+      <div class="messages" id="messages">
+        <div class="message assistant">
+          <div class="bubble">
+            Hi! I'm MemoryLens 👋 Tell me about a photo you're trying to find.
+            It can be as vague as you like — something like <em>"a photo from
+            my Goa trip at a small café"</em> or <em>"medicine I took when I was
+            sick last year."</em>
+          </div>
+        </div>
+      </div>
+
+      <div class="input-row">
+        <textarea
+          id="user-input"
+          placeholder="Describe the photo you're looking for…"
+          rows="2"
+        ></textarea>
+        <button id="send-btn">Send</button>
+      </div>
+    </div>
+
+    <!-- RIGHT: Search query panel -->
+    <div class="query-panel" id="query-panel">
+      <h2>Search Plan</h2>
+      <p class="hint">Once I have enough clues, I'll build a structured search
+        plan here that maps to Google Photos filters.</p>
+      <div id="query-content" class="query-empty">
+        Awaiting conversation…
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const SESSION_ID = 'session_' + Math.random().toString(36).slice(2);
+    const messagesEl = document.getElementById('messages');
+    const inputEl    = document.getElementById('user-input');
+    const sendBtn    = document.getElementById('send-btn');
+    const resetBtn   = document.getElementById('reset-btn');
+    const queryEl    = document.getElementById('query-content');
+
+    function appendMessage(role, text) {
+      const div = document.createElement('div');
+      div.className = `message ${role}`;
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble';
+      bubble.innerHTML = text.replace(/\n/g, '<br>');
+      div.appendChild(bubble);
+      messagesEl.appendChild(div);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function renderSearchQuery(q) {
+      if (!q) return;
+      const fields = [
+        ['Occasion',          q.occasion],
+        ['Approximate Year',  q.approximate_year],
+        ['Location',          q.location_context],
+        ['Scene Details',     Array.isArray(q.scene_details) ? q.scene_details.join(', ') : q.scene_details],
+        ['People / Subjects', q.people_or_subjects],
+        ['Summary',           q.search_summary],
+      ];
+      let html = '<ul class="query-list">';
+      for (const [label, val] of fields) {
+        if (val) {
+          html += `<li><strong>${label}:</strong> ${val}</li>`;
+        }
+      }
+      html += '</ul>';
+      html += `<div class="query-actions">
+        <button onclick="copyQuery()">📋 Copy Query</button>
+      </div>`;
+      queryEl.innerHTML = html;
+      queryEl.classList.remove('query-empty');
+      document.getElementById('query-panel').classList.add('active');
+    }
+
+    async function sendMessage() {
+      const text = inputEl.value.trim();
+      if (!text) return;
+
+      appendMessage('user', text);
+      inputEl.value = '';
+      sendBtn.disabled = true;
+
+      const typingDiv = document.createElement('div');
+      typingDiv.className = 'message assistant';
+      typingDiv.id = 'typing';
+      typingDiv.innerHTML = '<div class="bubble typing">Thinking…</div>';
+      messagesEl.appendChild(typingDiv);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+
+      try {
+        const res = await fetch('/chat', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({session_id: SESSION_ID, message: text}),
+        });
+        const data = await res.json();
+        document.getElementById('typing')?.remove();
+        appendMessage('assistant', data.reply || data.error);
+        if (data.search_query) renderSearchQuery(data.search_query);
+      } catch (e) {
+        document.getElementById('typing')?.remove();
+        appendMessage('assistant', 'Something went wrong. Please try again.');
+      } finally {
+        sendBtn.disabled = false;
+        inputEl.focus();
+      }
+    }
+
+    function copyQuery() {
+      const text = queryEl.innerText;
+      navigator.clipboard.writeText(text).then(() => alert('Copied!'));
+    }
+
+    sendBtn.addEventListener('click', sendMessage);
+    inputEl.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+    });
+    resetBtn.addEventListener('click', async () => {
+      await fetch('/reset', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({session_id: SESSION_ID}),
+      });
+      messagesEl.innerHTML = `
+        <div class="message assistant">
+          <div class="bubble">Hi! I'm MemoryLens 👋 Tell me about a photo you're trying to find.</div>
+        </div>`;
+      queryEl.innerHTML = 'Awaiting conversation…';
+      queryEl.className = 'query-empty';
+    });
+  </script>
+</body>
+</html>
