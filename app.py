@@ -13,6 +13,7 @@ from flask import Flask, render_template, request, jsonify
 app = Flask(__name__)
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "YOUR_GEMINI_API_KEY_HERE")
+GEMINI_MODEL   = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
 
 # Lazy-import Gemini so the app starts fine even without the package
 _model = None
@@ -23,7 +24,7 @@ def _get_model():
         try:
             import google.generativeai as genai  # type: ignore
             genai.configure(api_key=GEMINI_API_KEY)
-            _model = genai.GenerativeModel("gemini-2.0-flash")
+            _model = genai.GenerativeModel(GEMINI_MODEL)
         except Exception as e:
             print(f"[Gemini init error] {e}")
     return _model
